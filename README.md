@@ -54,6 +54,10 @@ Ce projet est conçu pour fonctionner avec :
 - [Vencord](https://github.com/Vendicated/Vencord)
 - [Equicord](https://github.com/Equicord/Equicord)
 
+## Avertissement
+
+L'utilisation de clients Discord modifiés et de plugins tiers va à l'encontre des conditions d'utilisation (Terms of Service) de Discord. Vous utilisez ces outils à vos propres risques. Pour plus de détails, veuillez consulter les [Conditions d'utilisation de Discord](https://discord.com/terms).
+
 <div align="center">
   <img src="https://media.tenor.com/T4R8ZFMxcnEAAAAM/fishsticks-fish.gif" alt="fish" />
 </div>
