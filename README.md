@@ -21,7 +21,13 @@ Avant de commencer, assurez-vous d'avoir installé les outils suivants :
 
 ## Bashcord
 
-Un grand merci à toutes les personnes qui ont utilisé Bashcord. Je n'ai plus l'envie ni le temps de le maintenir, car je souhaite me reconcentrer sur le pentest et le reverse engineering mais encore une fois merci.
+Un grand merci à toutes les personnes qui ont utilisé Bashcord. Je n'ai plus la motivation de le maintenir, car je souhaite me reconcentrer sur le pentest et le reverse engineering.
+
+## Crédits
+
+Ce projet est conçu pour fonctionner avec :
+- [Vencord](https://github.com/Vendicated/Vencord)
+- [Equicord](https://github.com/Equicord/Equicord)
 
 <div align="center">
   <img src="https://media.tenor.com/T4R8ZFMxcnEAAAAM/fishsticks-fish.gif" alt="fish" />
