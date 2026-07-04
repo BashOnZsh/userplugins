@@ -2,6 +2,14 @@
 
 Ce dépôt contient des plugins utilisateurs pour Equicord et Vencord.
 
+## Prérequis
+
+Avant de commencer, assurez-vous d'avoir installé les outils suivants :
+
+- **Git** (pour cloner les dépôts) : [Windows](https://gitforwindows.org/) | [macOS](https://git-scm.com/download/mac) | [Linux](https://git-scm.com/download/linux)
+- **Node.js** (environnement d'exécution) : [Télécharger (Toutes plateformes)](https://nodejs.org/fr/download/)
+- **pnpm** (gestionnaire de paquets) : [Instructions d'installation](https://pnpm.io/fr/installation)
+
 ## Comment les utiliser
 
 1. Clonez ou téléchargez ce dépôt.
@@ -13,7 +21,7 @@ Ce dépôt contient des plugins utilisateurs pour Equicord et Vencord.
 
 ## Bashcord
 
-Un grand merci à toutes les personnes qui ont utilisé Bashcord. Je n'ai plus la motivation de le maintenir, car je souhaite me reconcentrer sur le pentest et le reverse engineering.
+Un grand merci à toutes les personnes qui ont utilisé Bashcord. Je n'ai plus l'envie ni le temps de le maintenir, car je souhaite me reconcentrer sur le pentest et le reverse engineering mais encore une fois merci.
 
 <div align="center">
   <img src="https://media.tenor.com/T4R8ZFMxcnEAAAAM/fishsticks-fish.gif" alt="fish" />
