@@ -30,8 +30,9 @@ const loginWithToken = (token: string) => {
     }
 };
 
-const joinServerWithToken = async (token: string, inviteCode: string) => {
+const joinServerWithToken = async (token: string, inviteCode: string, proxy?: string) => {
     try {
+        console.log(`[TokenLoginManager] joinServerWithToken called. Invite: ${inviteCode}`);
         // Créer un iframe temporaire pour le token
         const iframe = document.createElement("iframe");
         document.body.appendChild(iframe);
@@ -48,6 +49,12 @@ const joinServerWithToken = async (token: string, inviteCode: string) => {
 
         // Attendre que le token soit appliqué
         await new Promise(resolve => setTimeout(resolve, 1000));
+
+        // Note: L'utilisation du proxy n'est pas nativement supportée par `fetch` de l'iframe.
+        // Il faudrait utiliser `https-proxy-agent` avec l'API Node.js si elle est activée.
+        if (proxy) {
+            console.warn("Proxy setting requested but not supported by browser fetch:", proxy);
+        }
 
         // Joindre le serveur via l'iframe
         const response = await contentWindow.fetch(`https://discord.com/api/v9/invites/${inviteCode}`, {
@@ -175,64 +182,63 @@ class TokenLoginManager {
 
     async importFromFile(file: File) {
         const text = await file.text();
-        const lines = text.split('\n').filter(line => line.trim());
+        const lines = text.split('\n').map(line => line.trim()).filter(Boolean);
 
-        let counter = 1;
         let successCount = 0;
-        let failCount = 0;
-        let invalidCount = 0;
 
-        for (const line of lines) {
-            const token = line.trim();
-            if (token) {
+        for (const token of lines) {
+            try {
+                // Extraire l'ID du token pour le nom d'utilisateur temporaire
+                let userId = "Unknown";
                 try {
-                    const accountInfo = await getAccountInfo(token);
-                    if (accountInfo.valid) {
-                        await this.addAccount({
-                            username: `${accountInfo.username}#${accountInfo.discriminator}`,
-                            token
-                        });
-                        successCount++;
-                        console.log(`Successfully imported account: ${accountInfo.username}#${accountInfo.discriminator}`);
-                    } else {
-                        console.log(`Skipping invalid token at line ${counter}`);
-                        invalidCount++;
-                    }
-                } catch (error) {
-                    console.error(`Failed to import token ${counter}:`, error);
-                    failCount++;
+                    userId = atob(token.split('.')[0]);
+                } catch {
+                    // Ignorer si le décodage échoue
                 }
-                counter++;
-                // Attendre un peu entre chaque token pour éviter le rate limit
-                await new Promise(resolve => setTimeout(resolve, 1000));
+
+                await this.addAccount({
+                    username: `ID: ${userId}`,
+                    token
+                });
+                successCount++;
+            } catch (error) {
+                console.error(`Failed to import token:`, error);
             }
         }
 
-        console.log(`Import completed. Success: ${successCount}, Invalid: ${invalidCount}, Failed: ${failCount}`);
-        return { successCount, invalidCount, failCount };
+        console.log(`Import completed. Success: ${successCount}`);
+        return { successCount, invalidCount: 0, failCount: lines.length - successCount };
     }
 
-    async joinAllToServer(inviteCode: string) {
+    async joinAllToServer(inviteCode: string, proxies: string[] = []) {
         let successCount = 0;
         let failCount = 0;
+        let proxyIndex = 0;
+
+        console.log(`[TokenLoginManager] joinAllToServer initiated. Invite: ${inviteCode}`);
 
         for (const account of Object.values(this.accounts)) {
-            console.log(`Attempting to join with account: ${account.username}`);
-            const success = await joinServerWithToken(account.token, inviteCode);
+            const proxy = proxies.length > 0 ? proxies[proxyIndex % proxies.length] : undefined;
+            console.log(`[TokenLoginManager] Attempting to join with account ID: ${account.id}, Username: ${account.username} (Proxy: ${proxy || 'None'})`);
+            
+            const success = await joinServerWithToken(account.token, inviteCode, proxy);
 
             if (success) {
                 successCount++;
-                console.log(`Successfully joined with ${account.username}`);
+                console.log(`[TokenLoginManager] Successfully joined with ${account.username}`);
             } else {
                 failCount++;
-                console.log(`Failed to join with ${account.username}`);
+                console.log(`[TokenLoginManager] Failed to join with ${account.username}`);
             }
+            
+            proxyIndex++;
 
             // Attendre un peu entre chaque token pour éviter le rate limit
+            console.log(`[TokenLoginManager] Waiting 2000ms before next attempt...`);
             await new Promise(resolve => setTimeout(resolve, 2000));
         }
 
-        console.log(`Join process completed. Success: ${successCount}, Failed: ${failCount}`);
+        console.log(`[TokenLoginManager] Join process completed. Success: ${successCount}, Failed: ${failCount}`);
         return { successCount, failCount };
     }
 }
@@ -352,8 +358,19 @@ const JoinServerModal = ({ manager, onClose, ...props }: Modal.ModalProps & {
     onClose: () => void;
 }) => {
     const [inviteCode, setInviteCode] = React.useState("");
+    const [proxiesInput, setProxiesInput] = React.useState("");
     const [isJoining, setIsJoining] = React.useState(false);
     const [status, setStatus] = React.useState("");
+
+    const handleProxyUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            console.log("[TokenLoginManager] Reading proxies file:", file.name);
+            const text = await file.text();
+            setProxiesInput(text);
+            console.log(`[TokenLoginManager] Loaded ${text.split('\n').length} lines from proxy file.`);
+        }
+    };
 
     return (
         <Modal.ModalRoot {...props}>
@@ -369,8 +386,31 @@ const JoinServerModal = ({ manager, onClose, ...props }: Modal.ModalProps & {
                         onChange={e => setInviteCode(e)}
                     />
                 </div>
+                <div className="token-login-section" style={{ marginTop: "16px" }}>
+                    <Flex justifyContent="space-between" alignItems="center" style={{ marginBottom: "8px" }}>
+                        <Text variant="heading-sm/medium">Proxies (Un par ligne, Optionnel)</Text>
+                        <Button 
+                            size={Button.Sizes.SMALL} 
+                            onClick={() => {
+                                const input = document.createElement('input');
+                                input.type = 'file';
+                                input.accept = '.txt';
+                                input.onchange = (e) => handleProxyUpload(e as any);
+                                input.click();
+                            }}
+                        >
+                            Importer .txt
+                        </Button>
+                    </Flex>
+                    <textarea 
+                        style={{ width: "100%", height: "100px", background: "var(--input-background)", color: "var(--text-normal)", border: "1px solid var(--input-border, transparent)", borderRadius: "4px", padding: "8px", resize: "vertical" }}
+                        placeholder="http://user:pass@ip:port"
+                        value={proxiesInput}
+                        onChange={e => setProxiesInput(e.target.value)}
+                    />
+                </div>
                 {status && (
-                    <div className="token-login-section">
+                    <div className="token-login-section" style={{ marginTop: "16px" }}>
                         <Text variant="text-sm/medium" style={{ color: status.includes("Failed") ? "var(--text-danger)" : "var(--text-positive)" }}>
                             {status}
                         </Text>
@@ -385,7 +425,9 @@ const JoinServerModal = ({ manager, onClose, ...props }: Modal.ModalProps & {
                         onClick={async () => {
                             setIsJoining(true);
                             setStatus("Joining servers...");
-                            const result = await manager.joinAllToServer(inviteCode);
+                            const proxies = proxiesInput.split('\n').map(p => p.trim()).filter(Boolean);
+                            console.log(`[TokenLoginManager] Starting mass join to ${inviteCode}. Total proxies: ${proxies.length}. Total accounts: ${Object.keys(manager.accounts).length}`);
+                            const result = await manager.joinAllToServer(inviteCode, proxies);
                             setStatus(`Completed: ${result.successCount} succeeded, ${result.failCount} failed`);
                             setIsJoining(false);
                             setTimeout(() => onClose(), 2000);

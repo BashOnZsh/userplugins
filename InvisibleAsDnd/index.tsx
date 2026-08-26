@@ -6,7 +6,7 @@
 
 import definePlugin from "@utils/types";
 import type { MessageJSON } from "@vencord/discord-types";
-import { NotificationSettingsStore, PresenceStore, UserStore } from "@webpack/common";
+import { FluxDispatcher, NotificationSettingsStore, PresenceStore, UserStore } from "@webpack/common";
 
 let originalGetUserAgnosticState: typeof NotificationSettingsStore.getUserAgnosticState | null = null;
 let originalTaskbarFlashDescriptor: PropertyDescriptor | null = null;
@@ -51,12 +51,30 @@ function isInvisible(): boolean {
     return !!currentUser && PresenceStore.getStatus(currentUser.id) === "invisible";
 }
 
+function callInterceptor(event: any) {
+    if (event.type !== "CALL_UPDATE" && event.type !== "CALL_CREATE") return;
+    if (!isInvisible()) return;
+
+    const currentUserId = UserStore.getCurrentUser()?.id;
+    if (!currentUserId) return;
+
+    if (Array.isArray(event.ringing) && event.ringing.includes(currentUserId)) {
+        event.ringing = event.ringing.filter((id: string) => id !== currentUserId);
+    }
+
+    if (Array.isArray(event.ongoingRings) && event.ongoingRings.includes(currentUserId)) {
+        event.ongoingRings = event.ongoingRings.filter((id: string) => id !== currentUserId);
+    }
+}
+
 export default definePlugin({
     name: "InvisibleAsDnd",
-    description: "Applique le comportement du mode Ne pas deranger aux notifications quand votre statut est invisible.",
+    description: "Applique le comportement du mode Ne pas deranger aux notifications et aux appels (aucune sonnerie ni notification d'appel) quand votre statut est invisible.",
     authors: [{ name: "Ba$h", id: 1462173272962764850n }],
     isModified: true,
     start() {
+        FluxDispatcher.addInterceptor(callInterceptor);
+
         if (originalGetUserAgnosticState == null) {
             originalGetUserAgnosticState = NotificationSettingsStore.getUserAgnosticState.bind(NotificationSettingsStore);
             NotificationSettingsStore.getUserAgnosticState = () => {
@@ -65,8 +83,6 @@ export default definePlugin({
                 return {
                     ...state,
                     taskbarFlash: false,
-                    sound: false,
-                    callSound: false,
                     disableAllSounds: true,
                 };
             };
@@ -88,6 +104,10 @@ export default definePlugin({
         }
     },
     stop() {
+        const interceptors = (FluxDispatcher as any)._interceptors ?? [];
+        const idx = interceptors.indexOf(callInterceptor);
+        if (idx !== -1) interceptors.splice(idx, 1);
+
         if (originalGetUserAgnosticState) {
             NotificationSettingsStore.getUserAgnosticState = originalGetUserAgnosticState;
             originalGetUserAgnosticState = null;
@@ -104,7 +124,7 @@ export default definePlugin({
     },
     patches: [
         {
-            find: ".getDesktopType()===",
+            find: '"NotificationStore"',
             replacement: [
                 {
                     match: /(\i\.\i\.getDesktopType\(\)===\i\.\i\.NEVER)\)(?=.*?(\i\.\i\.playNotificationSound\(.{0,5}\)))/,

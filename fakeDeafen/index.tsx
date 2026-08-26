@@ -7,8 +7,7 @@
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
 import { findByProps, find } from "@webpack";
-import { React, useState } from "@webpack/common";
-import { Forms } from "@webpack/common";
+import { React, useState, Forms, Button, TextInput } from "@webpack/common";
 
 let originalVoiceStateUpdate: any;
 let patchedGatewayConnection: any;
@@ -159,34 +158,21 @@ function KeybindRecorder() {
         <Forms.FormSection>
             <Forms.FormTitle tag="h3">Raccourci clavier</Forms.FormTitle>
             <Forms.FormText>Cliquez sur "Enregistrer" puis appuyez sur la combinaison de touches souhaitée</Forms.FormText>
-            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "8px" }}>
-                <input
-                    type="text"
-                    value={isRecording ? "Appuyez sur une touche..." : keybind}
-                    readOnly
-                    style={{
-                        padding: "8px",
-                        borderRadius: "4px",
-                        border: "1px solid var(--background-modifier-accent)",
-                        backgroundColor: isRecording ? "var(--background-tertiary)" : "var(--background-secondary)",
-                        color: "var(--text-normal)",
-                        flex: "1",
-                        cursor: "default"
-                    }}
-                />
-                <button
+            <div style={{ display: "flex", gap: "8px", alignItems: "center", marginTop: "16px", marginBottom: "16px" }}>
+                <div style={{ flex: 1 }}>
+                    <TextInput
+                        value={isRecording ? "Appuyez sur une touche..." : keybind}
+                        disabled={false}
+                        readOnly={true}
+                        placeholder="Aucun raccourci défini"
+                    />
+                </div>
+                <Button
                     onClick={() => setIsRecording(!isRecording)}
-                    style={{
-                        padding: "8px 16px",
-                        borderRadius: "4px",
-                        border: "none",
-                        backgroundColor: isRecording ? "var(--button-danger-background)" : "var(--button-secondary-background)",
-                        color: "var(--white)",
-                        cursor: "pointer"
-                    }}
+                    color={isRecording ? Button.Colors.RED : Button.Colors.BRAND}
                 >
                     {isRecording ? "Annuler" : "Enregistrer"}
-                </button>
+                </Button>
             </div>
         </Forms.FormSection>
     );
