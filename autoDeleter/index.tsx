@@ -18,10 +18,6 @@ interface TrackedMessage {
     timeoutId?: NodeJS.Timeout; // Optionnel car pas sauvegardé
     content?: string; // Contenu original pour debug
     length?: number; // Longueur du message
-    hasEmbed?: boolean;
-    hasAttachment?: boolean;
-    hasReactions?: boolean;
-    deletionMode?: string; // Mode de suppression spécifique
     priority?: number; // Priorité de suppression (1-10)
 }
 
@@ -34,16 +30,10 @@ interface DeletionStats {
     lastHourReset: number;
     totalBytesSaved: number;
     averageMessageLength: number;
-    deletionModes: Record<string, number>;
     channelStats: Record<string, number>;
 }
 
 const settings = definePluginSettings({
-    enabled: {
-        type: OptionType.BOOLEAN,
-        description: "Activer la suppression automatique des messages",
-        default: false
-    },
     defaultDelay: {
         type: OptionType.NUMBER,
         description: "Délai avant suppression (en unité rentrée en bas)",
@@ -60,229 +50,16 @@ const settings = definePluginSettings({
             { label: "Heures", value: "hours" }
         ]
     },
-    deletionMode: {
-        type: OptionType.SELECT,
-        description: "Mode de suppression",
-        options: [
-            { label: "Suppression normale", value: "normal", default: true },
-            { label: "AntiLog (masque MessageLogger)", value: "antilog" },
-            { label: "Suppression silencieuse", value: "silent" },
-            { label: "Édition puis suppression", value: "edit_delete" }
-        ]
-    },
-    channelMode: {
-        type: OptionType.SELECT,
-        description: "Mode de filtrage des canaux",
-        options: [
-            { label: "Tous les canaux", value: "all", default: true },
-            { label: "Canaux spécifiques seulement", value: "whitelist" },
-            { label: "Exclure certains canaux", value: "blacklist" },
-            { label: "Serveurs spécifiques", value: "guilds" }
-        ]
-    },
-    channelList: {
+    excludedChannels: {
         type: OptionType.STRING,
-        description: "IDs des canaux (séparés par des virgules)",
+        description: "IDs des salons exclus (géré par les commandes /autodeleter)",
         default: ""
-    },
-    guildList: {
-        type: OptionType.STRING,
-        description: "IDs des serveurs (séparés par des virgules)",
-        default: ""
-    },
-    preserveKeywords: {
-        type: OptionType.STRING,
-        description: "Mots-clés à préserver (séparés par des virgules)",
-        default: ""
-    },
-    deleteKeywords: {
-        type: OptionType.STRING,
-        description: "Mots-clés pour suppression immédiate (séparés par des virgules)",
-        default: ""
-    },
-    maxMessageLength: {
-        type: OptionType.NUMBER,
-        description: "Longueur maximale des messages à supprimer (0 = illimité)",
-        default: 0,
-        min: 0,
-        max: 2000
-    },
-    minMessageLength: {
-        type: OptionType.NUMBER,
-        description: "Longueur minimale des messages à supprimer",
-        default: 0,
-        min: 0,
-        max: 2000
-    },
-    preserveEmbeds: {
-        type: OptionType.BOOLEAN,
-        description: "Préserver les messages avec des embeds",
-        default: true
-    },
-    preserveAttachments: {
-        type: OptionType.BOOLEAN,
-        description: "Préserver les messages avec des fichiers joints",
-        default: true
-    },
-    preserveReactions: {
-        type: OptionType.BOOLEAN,
-        description: "Préserver les messages avec des réactions",
-        default: false
-    },
-    smartDelay: {
-        type: OptionType.BOOLEAN,
-        description: "Délai intelligent basé sur la longueur du message",
-        default: false
-    },
-    notifications: {
-        type: OptionType.BOOLEAN,
-        description: "Afficher les notifications de suppression",
-        default: false
-    },
-    notificationType: {
-        type: OptionType.SELECT,
-        description: "Type de notification",
-        options: [
-            { label: "Console seulement", value: "console", default: true },
-            { label: "Toast notifications", value: "toast" },
-            { label: "Les deux", value: "both" }
-        ]
-    },
-    debug: {
-        type: OptionType.BOOLEAN,
-        description: "Mode debug (logs détaillés)",
-        default: false
-    },
-    useAntiLogDeletion: {
-        type: OptionType.BOOLEAN,
-        description: "Utiliser la suppression AntiLog (masque les messages des plugins MessageLogger)",
-        default: true
-    },
-    blockMessage: {
-        type: OptionType.STRING,
-        description: "Texte à afficher à la place du message supprimé (pour AntiLog)",
-        default: "x"
-    },
-    deleteInterval: {
-        type: OptionType.NUMBER,
-        description: "Délai entre la suppression de l'ancien et du nouveau message (ms) - pour AntiLog",
-        default: 200
-    },
-    rateLimitHandling: {
-        type: OptionType.BOOLEAN,
-        description: "Gestion automatique des rate limits Discord",
-        default: true
-    },
-    maxRetries: {
-        type: OptionType.NUMBER,
-        description: "Nombre maximum de tentatives de suppression",
-        default: 3,
-        min: 1,
-        max: 10
-    },
-    retryDelay: {
-        type: OptionType.NUMBER,
-        description: "Délai de base entre les tentatives (ms)",
-        default: 1000,
-        min: 100,
-        max: 10000
-    },
-    adaptiveDelay: {
-        type: OptionType.BOOLEAN,
-        description: "Ajustement automatique des délais selon les rate limits",
-        default: true
-    },
-    aggressiveThrottling: {
-        type: OptionType.BOOLEAN,
-        description: "Throttling agressif pour éviter les rate limits",
-        default: true
-    },
-    maxDeletionsPerMinute: {
-        type: OptionType.NUMBER,
-        description: "Nombre maximum de suppressions par minute",
-        default: 8,
-        min: 1,
-        max: 30
-    },
-    minDelayBetweenDeletions: {
-        type: OptionType.NUMBER,
-        description: "Délai minimum entre les suppressions (ms)",
-        default: 2000,
-        min: 500,
-        max: 10000
-    },
-    circuitBreakerThreshold: {
-        type: OptionType.NUMBER,
-        description: "Seuil pour ouvrir le circuit breaker (rate limits consécutifs)",
-        default: 5,
-        min: 3,
-        max: 20
-    },
-    circuitBreakerDuration: {
-        type: OptionType.NUMBER,
-        description: "Durée du circuit breaker (minutes)",
-        default: 5,
-        min: 1,
-        max: 30
-    },
-    editMessage: {
-        type: OptionType.STRING,
-        description: "Texte de remplacement avant suppression (mode édition)",
-        default: "Message supprimé automatiquement"
-    },
-    editDelay: {
-        type: OptionType.NUMBER,
-        description: "Délai avant suppression après édition (ms)",
-        default: 1000
-    },
-    batchDelete: {
-        type: OptionType.BOOLEAN,
-        description: "Suppression par lots pour optimiser les performances",
-        default: false
-    },
-    batchSize: {
-        type: OptionType.NUMBER,
-        description: "Taille des lots de suppression",
-        default: 5,
-        min: 1,
-        max: 20
-    },
-    batchDelay: {
-        type: OptionType.NUMBER,
-        description: "Délai entre les lots (ms)",
-        default: 200
-    },
-    emergencyStop: {
-        type: OptionType.BOOLEAN,
-        description: "Arrêt d'urgence - annule toutes les suppressions programmées",
-        default: false
-    },
-    maxMessagesPerHour: {
-        type: OptionType.NUMBER,
-        description: "Nombre maximum de messages à supprimer par heure (0 = illimité)",
-        default: 0,
-        min: 0,
-        max: 1000
     }
 });
 
 const STORAGE_KEY = "AutoDeleter_TrackedMessages";
 
 // Fonctions utilitaires pour la suppression AntiLog
-function messageSendWrapper(content: string, nonce: string, channelId: string) {
-    const wrapperResponse = RestAPI.post({
-        url: Constants.Endpoints.MESSAGES(channelId),
-        body: {
-            content: content,
-            flags: 0,
-            mobile_network_type: "unknown",
-            nonce: nonce,
-            tts: false,
-        }
-    });
-    return wrapperResponse;
-}
-
 async function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
 }
@@ -294,18 +71,6 @@ function parseCsvList(raw: string): string[] {
         .filter(Boolean);
 }
 
-function getAntiLogReplacementContent() {
-    // Keep an invisible fallback to avoid Discord rejecting an empty content payload.
-    const configured = settings.store.blockMessage?.trim();
-    return configured && configured.length > 0 ? configured : "\u17B5";
-}
-
-async function messageDeleteWrapper(channelId: string, messageId: string) {
-    await RestAPI.del({
-        url: `/channels/${channelId}/messages/${messageId}`
-    });
-}
-
 export default definePlugin({
     name: "AutoDeleter",
     description: "Supprime automatiquement vos messages après un délai configurable (persistant après redémarrage)",
@@ -314,6 +79,49 @@ export default definePlugin({
         id: 1327483363518582784n
     }],
     settings,
+
+    commands: [{
+        name: "autodeleter",
+        description: "Gérer l'AutoDeleter pour ce salon",
+        options: [
+            {
+                name: "action",
+                description: "Exclure (exclude) ou Inclure (include) ce salon",
+                type: 3,
+                required: true,
+                choices: [
+                    { name: "exclude", displayName: "Exclure ce salon", label: "Exclure ce salon", value: "exclude" },
+                    { name: "include", displayName: "Inclure ce salon", label: "Inclure ce salon", value: "include" }
+                ]
+            }
+        ],
+        execute(args: any, ctx: any) {
+            const action = args.find((a: any) => a.name === "action")?.value;
+            const channelId = ctx.channel.id;
+            
+            const excludedStr = settings.store.excludedChannels || "";
+            let excludedList = excludedStr.split(",").map((i: string) => i.trim()).filter(Boolean);
+            
+            if (action === "exclude") {
+                if (!excludedList.includes(channelId)) {
+                    excludedList.push(channelId);
+                    settings.store.excludedChannels = excludedList.join(",");
+                    return { content: "✅ Ce salon a été ajouté à la liste d'exclusion. L'AutoDeleter n'agira plus ici." };
+                } else {
+                    return { content: "ℹ️ Ce salon est déjà dans la liste d'exclusion." };
+                }
+            } else if (action === "include") {
+                if (excludedList.includes(channelId)) {
+                    excludedList = excludedList.filter((id: string) => id !== channelId);
+                    settings.store.excludedChannels = excludedList.join(",");
+                    return { content: "✅ Ce salon a été retiré de la liste d'exclusion. L'AutoDeleter fonctionnera de nouveau ici." };
+                } else {
+                    return { content: "ℹ️ Ce salon n'était pas dans la liste d'exclusion." };
+                }
+            }
+            return { content: "Action invalide." };
+        }
+    }],
 
     // Map pour suivre les messages en attente de suppression
     trackedMessages: new Map<string, TrackedMessage>(),
@@ -331,7 +139,6 @@ export default definePlugin({
         lastHourReset: Date.now(),
         totalBytesSaved: 0,
         averageMessageLength: 0,
-        deletionModes: {} as Record<string, number>,
         channelStats: {} as Record<string, number>
     } as DeletionStats,
 
@@ -340,7 +147,7 @@ export default definePlugin({
     channelCache: new Map<string, any>(),
 
     // Queue de suppression par lots
-    deletionQueue: [] as Array<{ messageId: string; channelId: string; mode: string; }>,
+    deletionQueue: [] as Array<{ messageId: string; channelId: string; }>,
     batchProcessor: null as NodeJS.Timeout | null,
 
     // Gestion des rate limits avancée
@@ -359,7 +166,7 @@ export default definePlugin({
     },
 
     // Cache des tentatives de suppression
-    retryQueue: [] as Array<{ messageId: string; channelId: string; mode: string; attempts: number; nextRetry: number; }>,
+    retryQueue: [] as Array<{ messageId: string; channelId: string; attempts: number; nextRetry: number; }>,
     retryProcessor: null as NodeJS.Timeout | null,
 
     // Horodatage de démarrage pour les stats d'uptime
@@ -423,7 +230,7 @@ export default definePlugin({
     // Sauvegarder les messages programmés
     async saveTrackedMessages() {
         try {
-            const messagesToSave = Array.from(this.trackedMessages.values()).map(msg => ({
+            const messagesToSave = Array.from(this.trackedMessages.values() as any).map((msg: any) => ({
                 id: msg.id,
                 channelId: msg.channelId,
                 timestamp: msg.timestamp,
@@ -460,20 +267,10 @@ export default definePlugin({
                     continue;
                 }
 
-                // Vérifier si le message existe encore
-                try {
-                    const message = MessageStore.getMessage(savedMsg.channelId, savedMsg.id);
-                    if (!message) {
-                        this.debug(`Message ${savedMsg.id} n'existe plus, ignoré`);
-                        continue;
-                    }
-
-                    // Reprogrammer la suppression
-                    this.scheduleMessageDeletionFromRestore(savedMsg, timeUntilDeletion);
-                    restoredCount++;
-                } catch (error) {
-                    this.debug(`Message ${savedMsg.id} introuvable, ignoré`);
-                }
+                // Reprogrammer la suppression
+                // (On ne vérifie pas MessageStore car le cache local est vidé au redémarrage de Discord)
+                this.scheduleMessageDeletionFromRestore(savedMsg, timeUntilDeletion);
+                restoredCount++;
             }
 
             this.stats.restoredFromStorage = restoredCount;
@@ -486,7 +283,7 @@ export default definePlugin({
 
     onMessageCreate(event: any) {
         try {
-            if (!settings.store.enabled || settings.store.emergencyStop) return;
+
 
             const message = event?.message;
             if (!message) return;
@@ -523,12 +320,6 @@ export default definePlugin({
                 }
             }
 
-            // Vérifier la limite horaire
-            if (!this.checkHourlyLimit()) {
-                this.debug("Limite horaire de suppression atteinte");
-                return;
-            }
-
             // Vérifier le throttling intelligent
             if (!this.checkThrottlingLimits()) {
                 this.debug("Limites de throttling atteintes");
@@ -541,28 +332,8 @@ export default definePlugin({
                 return;
             }
 
-            // Vérifier les filtres de serveur
-            if (!this.shouldProcessGuild(message.guild_id)) {
-                this.debug(`Serveur ${message.guild_id} ignoré par les filtres`);
-                return;
-            }
-
-            // Vérifier les mots-clés à préserver
-            if (this.shouldPreserveMessage(message)) {
-                this.debug(`Message préservé à cause des filtres: ${message.content}`);
-                this.stats.messagesSaved++;
-                return;
-            }
-
-            // Vérifier les mots-clés de suppression immédiate
-            if (this.shouldDeleteImmediately(message.content)) {
-                this.debug(`Suppression immédiate demandée: ${message.content}`);
-                this.scheduleMessageDeletion(message, 2000); // 2 secondes minimum
-                return;
-            }
-
             // Programmer la suppression avec délai intelligent
-            const delay = this.calculateSmartDelay(message);
+            const delay = this.getDelayInMs();
             this.scheduleMessageDeletion(message, delay);
         } catch (error) {
             this.error("Erreur dans onMessageCreate:", error);
@@ -570,126 +341,17 @@ export default definePlugin({
     },
 
     shouldProcessChannel(channelId: string): boolean {
-        const mode = settings.store.channelMode;
-        const channelList = parseCsvList(settings.store.channelList);
-
-        switch (mode) {
-            case "all":
-                return true;
-            case "whitelist":
-                return channelList.includes(channelId);
-            case "blacklist":
-                return !channelList.includes(channelId);
-            case "guilds":
-                // Pour le mode guilds, on vérifie dans shouldProcessGuild
-                return true;
-            default:
-                return true;
-        }
+        const excludedStr = settings.store.excludedChannels || "";
+        const excludedList = parseCsvList(excludedStr);
+        return !excludedList.includes(channelId);
     },
 
-    shouldProcessGuild(guildId: string): boolean {
-        const mode = settings.store.channelMode;
 
-        if (mode !== "guilds") return true;
 
-        const guildList = parseCsvList(settings.store.guildList);
 
-        return guildList.includes(guildId);
-    },
-
-    shouldPreserveMessage(message: any): boolean {
-        const content = message.content || "";
-
-        // Vérifier les mots-clés de préservation
-        const keywords = parseCsvList(settings.store.preserveKeywords)
-            .map(keyword => keyword.toLowerCase())
-            .filter(keyword => keyword.length > 0);
-
-        if (keywords.length > 0) {
-            const lowerContent = content.toLowerCase();
-            if (keywords.some(keyword => lowerContent.includes(keyword))) {
-                return true;
-            }
-        }
-
-        // Vérifier la longueur du message
-        if (settings.store.maxMessageLength > 0 && content.length > settings.store.maxMessageLength) {
-            return true;
-        }
-
-        if (settings.store.minMessageLength > 0 && content.length < settings.store.minMessageLength) {
-            return true;
-        }
-
-        // Vérifier les embeds
-        if (settings.store.preserveEmbeds && message.embeds && message.embeds.length > 0) {
-            return true;
-        }
-
-        // Vérifier les fichiers joints
-        if (settings.store.preserveAttachments && message.attachments && message.attachments.length > 0) {
-            return true;
-        }
-
-        // Vérifier les réactions
-        if (settings.store.preserveReactions && message.reactions && message.reactions.length > 0) {
-            return true;
-        }
-
-        return false;
-    },
-
-    shouldDeleteImmediately(content: string): boolean {
-        if (!content) return false;
-
-        const keywords = parseCsvList(settings.store.deleteKeywords)
-            .map(keyword => keyword.toLowerCase())
-            .filter(keyword => keyword.length > 0);
-
-        if (keywords.length === 0) return false;
-
-        const lowerContent = content.toLowerCase();
-        return keywords.some(keyword => lowerContent.includes(keyword));
-    },
-
-    calculateSmartDelay(message: any): number {
-        if (!settings.store.smartDelay) {
-            return this.getDelayInMs();
-        }
-
-        const baseDelay = this.getDelayInMs();
-        const contentLength = (message.content || "").length;
-
-        // Délai basé sur la longueur : plus le message est long, plus on attend
-        const lengthMultiplier = Math.min(1 + (contentLength / 1000), 3); // Max 3x le délai de base
-
-        // Délai basé sur les embeds/attachments
-        const mediaMultiplier = (message.embeds?.length || 0) > 0 || (message.attachments?.length || 0) > 0 ? 1.5 : 1;
-
-        return Math.floor(baseDelay * lengthMultiplier * mediaMultiplier);
-    },
-
-    checkHourlyLimit(): boolean {
-        const now = Date.now();
-        const hourInMs = 60 * 60 * 1000;
-
-        // Reset du compteur horaire si nécessaire
-        if (now - this.stats.lastHourReset > hourInMs) {
-            this.stats.hourlyDeletions = 0;
-            this.stats.lastHourReset = now;
-        }
-
-        const maxPerHour = settings.store.maxMessagesPerHour;
-        if (maxPerHour > 0 && this.stats.hourlyDeletions >= maxPerHour) {
-            return false;
-        }
-
-        return true;
-    },
 
     checkThrottlingLimits(): boolean {
-        if (!settings.store.aggressiveThrottling) return true;
+        if (!true) return true;
 
         const now = Date.now();
         const minuteInMs = 60 * 1000;
@@ -701,14 +363,14 @@ export default definePlugin({
         }
 
         // Vérifier le nombre de suppressions par minute
-        const maxPerMinute = settings.store.maxDeletionsPerMinute;
+        const maxPerMinute = 8;
         if (this.throttlingInfo.deletionCount >= maxPerMinute) {
             this.debug(`Limite de ${maxPerMinute} suppressions par minute atteinte`);
             return false;
         }
 
         // Vérifier le délai minimum entre les suppressions
-        const minDelay = settings.store.minDelayBetweenDeletions;
+        const minDelay = 2000;
         const timeSinceLastDeletion = now - this.throttlingInfo.lastDeletionTime;
         if (timeSinceLastDeletion < minDelay) {
             this.debug(`Délai minimum de ${minDelay}ms non respecté`);
@@ -728,20 +390,18 @@ export default definePlugin({
     scheduleMessageDeletion(message: any, customDelay?: number) {
         const delay = customDelay || this.getDelayInMs();
         const scheduledTime = Date.now() + delay;
-        const { deletionMode } = settings.store;
-
-        const existing = this.trackedMessages.get(message.id);
+                const existing = this.trackedMessages.get(message.id);
         if (existing?.timeoutId) {
             clearTimeout(existing.timeoutId);
         }
 
-        this.debug(`Programmation suppression message ${message.id} dans ${delay}ms (${new Date(scheduledTime).toLocaleString()}) - Mode: ${deletionMode}`);
+        this.debug(`Programmation suppression message ${message.id} dans ${delay}ms (${new Date(scheduledTime).toLocaleString()})`);
 
         const timeoutId = setTimeout(() => {
-            if (settings.store.batchDelete) {
-                this.addToDeletionQueue(message.id, message.channel_id, deletionMode);
+            if (false) { // debug disabled
+                this.addToDeletionQueue(message.id, message.channel_id);
             } else {
-                this.deleteMessage(message.id, message.channel_id, deletionMode);
+                this.deleteMessage(message.id, message.channel_id);
             }
         }, delay);
 
@@ -755,10 +415,6 @@ export default definePlugin({
             timeoutId: timeoutId,
             content: message.content,
             length: (message.content || "").length,
-            hasEmbed: !!(message.embeds && message.embeds.length > 0),
-            hasAttachment: !!(message.attachments && message.attachments.length > 0),
-            hasReactions: !!(message.reactions && message.reactions.length > 0),
-            deletionMode: deletionMode,
             priority: this.calculatePriority(message)
         };
 
@@ -785,8 +441,8 @@ export default definePlugin({
         return Math.min(priority, 10);
     },
 
-    addToDeletionQueue(messageId: string, channelId: string, mode: string) {
-        this.deletionQueue.push({ messageId, channelId, mode });
+    addToDeletionQueue(messageId: string, channelId: string) {
+        this.deletionQueue.push({ messageId, channelId });
 
         if (!this.batchProcessor) {
             this.startBatchProcessor();
@@ -796,7 +452,7 @@ export default definePlugin({
     startBatchProcessor() {
         this.batchProcessor = setInterval(() => {
             this.processBatchDeletion();
-        }, settings.store.batchDelay);
+        }, 200);
     },
 
     async processBatchDeletion() {
@@ -808,11 +464,11 @@ export default definePlugin({
             return;
         }
 
-        const batch = this.deletionQueue.splice(0, settings.store.batchSize);
+        const batch = this.deletionQueue.splice(0, 5);
 
         for (const item of batch) {
             try {
-                await this.deleteMessage(item.messageId, item.channelId, item.mode);
+                await this.deleteMessage(item.messageId, item.channelId);
             } catch (error) {
                 this.error("Erreur dans le batch de suppression:", error);
             }
@@ -835,17 +491,16 @@ export default definePlugin({
         this.trackedMessages.set(savedMsg.id, trackedMessage);
     },
 
-    async deleteMessage(messageId: string, channelId: string, mode?: string, attempt: number = 1) {
+    async deleteMessage(messageId: string, channelId: string, attempt: number = 1) {
         try {
-            const deletionMode = mode || settings.store.deletionMode;
-            this.debug(`Tentative de suppression du message ${messageId} - Mode: ${deletionMode} (tentative ${attempt})`);
+            this.debug(`Tentative de suppression du message ${messageId} (tentative ${attempt})`);
 
             // Vérifier si on est en rate limit
-            if (this.rateLimitInfo.isRateLimited && settings.store.rateLimitHandling) {
+            if (this.rateLimitInfo.isRateLimited && true) {
                 const timeSinceLastRateLimit = Date.now() - this.rateLimitInfo.lastRateLimit;
                 if (timeSinceLastRateLimit < this.rateLimitInfo.retryAfter * 1000) {
                     this.debug(`Rate limit actif, ajout à la queue de retry: ${messageId}`);
-                    this.addToRetryQueue(messageId, channelId, deletionMode, attempt);
+                    this.addToRetryQueue(messageId, channelId, attempt);
                     return;
                 } else {
                     // Reset du rate limit
@@ -858,33 +513,15 @@ export default definePlugin({
             // Vérifier le throttling avant la suppression
             if (!this.checkThrottlingLimits()) {
                 this.debug(`Throttling actif, ajout à la queue de retry: ${messageId}`);
-                this.addToRetryQueue(messageId, channelId, deletionMode, attempt, 5000);
+                this.addToRetryQueue(messageId, channelId, attempt, 5000);
                 return;
             }
 
-            switch (deletionMode) {
-                case "antilog":
-                    if (settings.store.useAntiLogDeletion) {
-                        await this.performAntiLogDeletion(messageId, channelId);
-                    } else {
-                        await this.performNormalDeletion(messageId, channelId);
-                    }
-                    break;
-                case "silent":
-                    await this.performSilentDeletion(messageId, channelId);
-                    break;
-                case "edit_delete":
-                    await this.performEditThenDelete(messageId, channelId);
-                    break;
-                default:
-                    await this.performNormalDeletion(messageId, channelId);
-                    break;
-            }
+            await this.performNormalDeletion(messageId, channelId);
 
             // Mettre à jour les statistiques seulement après succès réel
             this.stats.hourlyDeletions++;
-            this.stats.deletionModes[deletionMode] = (this.stats.deletionModes[deletionMode] || 0) + 1;
-            this.stats.channelStats[channelId] = (this.stats.channelStats[channelId] || 0) + 1;
+                        this.stats.channelStats[channelId] = (this.stats.channelStats[channelId] || 0) + 1;
 
             const trackedMessage = this.trackedMessages.get(messageId);
             if (trackedMessage) {
@@ -892,7 +529,7 @@ export default definePlugin({
                 this.updateAverageMessageLength(trackedMessage.length || 0);
             }
 
-            this.log(`Message ${messageId} supprimé avec succès (${deletionMode})`);
+            this.log(`Message ${messageId} supprimé avec succès`);
             this.stats.messagesDeleted++;
 
             // Mettre à jour les informations de throttling
@@ -903,12 +540,12 @@ export default definePlugin({
                 this.rateLimitInfo.consecutiveRateLimits = Math.max(0, this.rateLimitInfo.consecutiveRateLimits - 1);
             }
 
-            if (settings.store.notifications) {
-                this.showNotification(`Message supprimé (${deletionMode})`, "success");
+            if (false) { // debug disabled
+                this.showNotification(`Message supprimé`, "success");
             }
 
         } catch (error: any) {
-            this.handleDeletionError(error, messageId, channelId, mode || settings.store.deletionMode, attempt);
+            this.handleDeletionError(error, messageId, channelId, attempt);
         } finally {
             // Retirer le message du suivi et du cache seulement si pas en retry
             if (!this.retryQueue.some(item => item.messageId === messageId)) {
@@ -920,22 +557,22 @@ export default definePlugin({
         }
     },
 
-    handleDeletionError(error: any, messageId: string, channelId: string, mode: string, attempt: number) {
+    handleDeletionError(error: any, messageId: string, channelId: string, attempt: number) {
         this.error(`Erreur lors de la suppression du message ${messageId}:`, error);
         this.stats.errors++;
 
         // Gestion spécifique des rate limits
-        if (error.status === 429 && settings.store.rateLimitHandling) {
-            this.handleRateLimit(error, messageId, channelId, mode, attempt);
+        if (error.status === 429 && true) {
+            this.handleRateLimit(error, messageId, channelId, attempt);
         } else if (error.status === 404) {
             // Message déjà supprimé ou introuvable
             this.debug(`Message ${messageId} déjà supprimé ou introuvable`);
             this.trackedMessages.delete(messageId);
             this.messageCache.delete(messageId);
-        } else if (attempt < settings.store.maxRetries) {
+        } else if (attempt < 3) {
             // Autres erreurs - retry
             this.debug(`Tentative ${attempt + 1} pour le message ${messageId}`);
-            this.addToRetryQueue(messageId, channelId, mode, attempt + 1);
+            this.addToRetryQueue(messageId, channelId, attempt + 1);
         } else {
             // Trop de tentatives
             this.error(`Abandon de la suppression du message ${messageId} après ${attempt} tentatives`);
@@ -943,12 +580,12 @@ export default definePlugin({
             this.messageCache.delete(messageId);
         }
 
-        if (settings.store.notifications) {
+        if (false) { // debug disabled
             this.showNotification("Erreur lors de la suppression", "error");
         }
     },
 
-    handleRateLimit(error: any, messageId: string, channelId: string, mode: string, attempt: number) {
+    handleRateLimit(error: any, messageId: string, channelId: string, attempt: number) {
         const retryAfter = error.body?.retry_after || 1;
 
         this.rateLimitInfo.isRateLimited = true;
@@ -958,7 +595,7 @@ export default definePlugin({
         this.rateLimitInfo.totalRateLimits++;
 
         // Augmenter le multiplicateur de backoff
-        if (settings.store.adaptiveDelay) {
+        if (true) {
             this.rateLimitInfo.backoffMultiplier = Math.min(10, 1 + (this.rateLimitInfo.consecutiveRateLimits * 0.5));
         }
 
@@ -971,20 +608,20 @@ export default definePlugin({
         }
 
         // Ouvrir le circuit breaker si trop de rate limits consécutifs
-        const threshold = settings.store.circuitBreakerThreshold;
+        const threshold = 5;
         if (this.rateLimitInfo.consecutiveRateLimits >= threshold) {
-            const duration = settings.store.circuitBreakerDuration * 60 * 1000; // Convertir en ms
+            const duration = 5 * 60 * 1000; // Convertir en ms
             this.rateLimitInfo.circuitBreakerOpen = true;
             this.rateLimitInfo.circuitBreakerUntil = Date.now() + duration;
-            this.log(`Circuit breaker ouvert pour ${settings.store.circuitBreakerDuration} minutes`);
+            this.log(`Circuit breaker ouvert pour ${5} minutes`);
         }
 
         this.log(`Rate limit détecté - Retry après ${retryAfter}s (tentative ${attempt}) - Total: ${this.rateLimitInfo.totalRateLimits}`);
 
-        if (attempt < settings.store.maxRetries) {
+        if (attempt < 3) {
             // Délai plus long pour les retries
             const retryDelay = Math.max(retryAfter * 1000, 5000); // Minimum 5 secondes
-            this.addToRetryQueue(messageId, channelId, mode, attempt, retryDelay);
+            this.addToRetryQueue(messageId, channelId, attempt, retryDelay);
         } else {
             this.error(`Abandon après rate limit - Message ${messageId}`);
             this.trackedMessages.delete(messageId);
@@ -992,14 +629,13 @@ export default definePlugin({
         }
     },
 
-    addToRetryQueue(messageId: string, channelId: string, mode: string, attempts: number, delay: number = 0) {
-        const baseDelay = delay || (settings.store.retryDelay * this.rateLimitInfo.backoffMultiplier);
+    addToRetryQueue(messageId: string, channelId: string, attempts: number, delay: number = 0) {
+        const baseDelay = delay || (1000 * this.rateLimitInfo.backoffMultiplier);
         const nextRetry = Date.now() + baseDelay;
 
         const existing = this.retryQueue.find(item => item.messageId === messageId);
         if (existing) {
             existing.channelId = channelId;
-            existing.mode = mode;
             existing.attempts = Math.max(existing.attempts, attempts);
             existing.nextRetry = Math.min(existing.nextRetry, nextRetry);
             this.debug(`Retry déjà en queue: ${messageId} (mise à jour)`);
@@ -1009,7 +645,6 @@ export default definePlugin({
         this.retryQueue.push({
             messageId,
             channelId,
-            mode,
             attempts,
             nextRetry
         });
@@ -1047,7 +682,7 @@ export default definePlugin({
             }
 
             this.debug(`Retry du message ${item.messageId} (tentative ${item.attempts})`);
-            this.deleteMessage(item.messageId, item.channelId, item.mode, item.attempts);
+            this.deleteMessage(item.messageId, item.channelId, item.attempts);
         }
     },
 
@@ -1055,99 +690,6 @@ export default definePlugin({
         await RestAPI.del({
             url: `/channels/${channelId}/messages/${messageId}`
         });
-    },
-
-    async performSilentDeletion(messageId: string, channelId: string) {
-        // Suppression silencieuse - pas de logs Discord
-        try {
-            await RestAPI.del({
-                url: `/channels/${channelId}/messages/${messageId}`
-            });
-        } catch (error) {
-            // Fallback antiLog uniquement si explicitement activé
-            if (settings.store.useAntiLogDeletion) {
-                await this.performAntiLogDeletion(messageId, channelId);
-            } else {
-                throw error;
-            }
-        }
-    },
-
-    async performEditThenDelete(messageId: string, channelId: string) {
-        try {
-            // Éditer le message d'abord
-            await RestAPI.patch({
-                url: `/channels/${channelId}/messages/${messageId}`,
-                body: {
-                    content: settings.store.editMessage
-                }
-            });
-
-            // Attendre le délai configuré
-            await sleep(settings.store.editDelay);
-
-            // Puis supprimer
-            await RestAPI.del({
-                url: `/channels/${channelId}/messages/${messageId}`
-            });
-        } catch (error) {
-            // En cas d'erreur, essayer la suppression normale
-            await this.performNormalDeletion(messageId, channelId);
-        }
-    },
-
-    // Nouvelle fonction pour la suppression AntiLog avec gestion des rate limits
-    async performAntiLogDeletion(messageId: string, channelId: string) {
-        if (!settings.store.useAntiLogDeletion) {
-            await this.performNormalDeletion(messageId, channelId);
-            return;
-        }
-
-        try {
-            this.debug(`Suppression AntiLog du message ${messageId}`);
-
-            // Hint pour les plugins de logging côté client
-            FluxDispatcher.dispatch({
-                type: "MESSAGE_DELETE",
-                channelId,
-                id: messageId,
-                mlDeleted: true
-            });
-
-            // Délai plus long et aléatoire pour éviter les rate limits
-            const randomDelay = Math.random() * 500 + 1000; // 1000-1500ms
-            await sleep(randomDelay);
-
-            // Envoyer un message de remplacement
-            const buggedMsgResponse = await messageSendWrapper(
-                getAntiLogReplacementContent(),
-                messageId,
-                channelId
-            );
-            const buggedMsgId = buggedMsgResponse?.body?.id;
-            if (!buggedMsgId) {
-                throw new Error("AntiLog: impossible d'obtenir l'id du message de remplacement");
-            }
-
-            // Délai beaucoup plus long entre les suppressions
-            const deleteDelay = Math.max(settings.store.deleteInterval, 3000); // Minimum 3 secondes
-            await sleep(deleteDelay);
-
-            // Supprimer le message original
-            await messageDeleteWrapper(channelId, messageId);
-
-            // Attendre le délai configuré
-            await sleep(deleteDelay);
-
-            // Supprimer le message de remplacement
-            await messageDeleteWrapper(channelId, buggedMsgId);
-
-            this.debug(`Suppression AntiLog terminée pour le message ${messageId}`);
-
-        } catch (error) {
-            this.error(`Erreur lors de la suppression AntiLog du message ${messageId}:`, error);
-            throw error; // Re-throw pour que la fonction parent puisse gérer l'erreur
-        }
     },
 
     getDelayInMs(): number {
@@ -1166,27 +708,6 @@ export default definePlugin({
         }
     },
 
-    showNotification(message: string, type: "success" | "error" | "info" = "info") {
-        const { notificationType } = settings.store;
-        const prefix = type === "error" ? "❌" : type === "success" ? "✅" : "ℹ️";
-        const logMessage = `[AutoDeleter] ${prefix} ${message}`;
-
-        if (notificationType === "console" || notificationType === "both") {
-            console.log(logMessage);
-        }
-
-        if (notificationType === "toast" || notificationType === "both") {
-            // TODO: Implémenter les toast notifications si l'API est disponible
-            this.showToastNotification(message, type);
-        }
-    },
-
-    showToastNotification(message: string, type: "success" | "error" | "info") {
-        // Placeholder pour les toast notifications
-        // Peut être implémenté avec l'API de notification de Vencord si disponible
-        console.log(`[AutoDeleter Toast] ${message}`);
-    },
-
     updateAverageMessageLength(newLength: number) {
         const totalMessages = this.stats.messagesDeleted;
         if (totalMessages === 1) {
@@ -1203,7 +724,7 @@ export default definePlugin({
     },
 
     debug(message: string, ...args: any[]) {
-        if (settings.store.debug) {
+        if (false) { // debug disabled
             console.debug(`[AutoDeleter DEBUG] ${message}`, ...args);
         }
     },
@@ -1242,7 +763,6 @@ export default definePlugin({
             lastHourReset: Date.now(),
             totalBytesSaved: 0,
             averageMessageLength: 0,
-            deletionModes: {},
             channelStats: {}
         };
         this.log("Statistiques réinitialisées");
@@ -1294,8 +814,8 @@ export default definePlugin({
             lastDeletionTime: 0,
             deletionCount: 0,
             windowStart: 0,
-            maxDeletionsPerMinute: settings.store.maxDeletionsPerMinute,
-            minDelayBetweenDeletions: settings.store.minDelayBetweenDeletions
+            maxDeletionsPerMinute: 8,
+            minDelayBetweenDeletions: 2000
         };
 
         // Vider les caches
@@ -1335,8 +855,8 @@ export default definePlugin({
             lastDeletionTime: 0,
             deletionCount: 0,
             windowStart: 0,
-            maxDeletionsPerMinute: settings.store.maxDeletionsPerMinute,
-            minDelayBetweenDeletions: settings.store.minDelayBetweenDeletions
+            maxDeletionsPerMinute: 8,
+            minDelayBetweenDeletions: 2000
         };
 
         this.log("Rate limits et throttling réinitialisés");
@@ -1358,7 +878,7 @@ export default definePlugin({
 
     // Méthode pour récupérer les messages en attente
     getPendingMessages() {
-        return Array.from(this.trackedMessages.values()).map((msg: TrackedMessage) => ({
+        return Array.from(this.trackedMessages.values() as any).map((msg: any) => ({
             id: msg.id,
             channelId: msg.channelId,
             scheduledTime: new Date(msg.scheduledTime).toLocaleString(),
